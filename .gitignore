@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+
+# Local environment configuration
+.env
+.env.*
+!.env.example
+
+# Bicep build output
+infra/bicep/.build/
+infra/bicep/main.json
+infra/bicep/modules/**/*.json

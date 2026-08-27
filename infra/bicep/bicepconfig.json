@@ -1,0 +1,28 @@
+{
+  "analyzers": {
+    "core": {
+      "enabled": true,
+      "verbose": true,
+      "rules": {
+        "explicit-values-for-loc-params": {
+          "level": "error"
+        },
+        "no-hardcoded-location": {
+          "level": "error"
+        },
+        "no-unused-params": {
+          "level": "error"
+        },
+        "no-unused-vars": {
+          "level": "error"
+        },
+        "secure-parameter-default": {
+          "level": "error"
+        },
+        "secure-secrets-in-params": {
+          "level": "error"
+        }
+      }
+    }
+  }
+}

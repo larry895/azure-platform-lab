@@ -50,6 +50,25 @@ jobs:
         shell: bash
         run: actionlint -color
 
+      - name: Install Bicep
+        shell: bash
+        env:
+          BICEP_VERSION: v0.46.1
+        run: |
+          az bicep install --version "$BICEP_VERSION"
+          az bicep version
+
+      - name: Validate and compile Bicep
+        shell: bash
+        run: |
+          while IFS= read -r file; do
+            echo "Linting ${file}"
+            az bicep lint --file "$file"
+
+            echo "Compiling ${file}"
+            az bicep build --file "$file" --stdout >/dev/null
+          done < <(find infra/bicep -type f -name '*.bicep' | sort)
+
       - name: Check changed files for whitespace errors
         shell: bash
         env:
