@@ -19,7 +19,7 @@ jobs:
     env:
       AZURE_CORE_OUTPUT: none
       AZURE_RESOURCE_OWNER: ${{ vars.AZURE_RESOURCE_OWNER }}
-      BUDGET_NOTIFICATION_EMAIL: ${{ vars.AZURE_BUDGET_NOTIFICATION_EMAIL }}
+      AZURE_BUDGET_NOTIFICATION_EMAIL: ${{ vars.AZURE_BUDGET_NOTIFICATION_EMAIL }}
 
     steps:
       - name: Check out repository
@@ -40,40 +40,36 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Prepare deployment parameters
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$AZURE_RESOURCE_OWNER" ]]; then
+            echo "AZURE_RESOURCE_OWNER is not configured."
+            exit 1
+          fi
+
+          if [[ -z "$AZURE_BUDGET_NOTIFICATION_EMAIL" ]]; then
+            echo "AZURE_BUDGET_NOTIFICATION_EMAIL is not configured."
+            exit 1
+          fi
+
+          echo "AZURE_BUDGET_START_DATE=$(date -u +'%Y-%m-01T00:00:00Z')" \
+            >> "$GITHUB_ENV"
+
+          echo "AZURE_BUDGET_END_DATE=$(date -u -d '+1 year' +'%Y-%m-01T00:00:00Z')" \
+            >> "$GITHUB_ENV"
+
       - name: Preview subscription changes
         shell: bash
         run: |
           set -euo pipefail
 
-          if [[ -z "$RESOURCE_OWNER" ]]; then
-            echo "AZURE_RESOURCE_OWNER is not configured."
-            exit 1
-          fi
-
-          if [[ -z "$BUDGET_NOTIFICATION_EMAIL" ]]; then
-            echo "AZURE_BUDGET_NOTIFICATION_EMAIL is not configured."
-            exit 1
-          fi
-
-          budget_start_date="$(date -u +'%Y-%m-01T00:00:00Z')"
-          budget_end_date="$(date -u -d '+1 year' +'%Y-%m-01T00:00:00Z')"
-
-          budget_notification_emails="$(
-            jq \
-              --compact-output \
-              --null-input \
-              --arg email "$BUDGET_NOTIFICATION_EMAIL" \
-              '[$email]'
-          )"
-
           az deployment sub what-if \
             --name "what-if-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             --location swedencentral \
-            --template-file infra/bicep/main.bicep \
-            --parameters \
-              resourceOwner="$RESOURCE_OWNER" \
-              budgetStartDate="$budget_start_date" \
-              budgetEndDate="$budget_end_date" \
-              budgetNotificationEmails="$budget_notification_emails" \
+            --parameters infra/bicep/parameters/dev.bicepparam \
             --result-format ResourceIdOnly \
+            --no-pretty-print \
             --output jsonc
