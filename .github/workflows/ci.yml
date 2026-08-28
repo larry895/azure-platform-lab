@@ -69,6 +69,19 @@ jobs:
             az bicep build --file "$file" --stdout >/dev/null
           done < <(find infra/bicep -type f -name '*.bicep' | sort)
 
+      - name: Validate Bicep parameters
+        shell: bash
+        env:
+          AZURE_RESOURCE_OWNER: ci-validation
+          AZURE_BUDGET_START_DATE: '2026-08-01T00:00:00Z'
+          AZURE_BUDGET_END_DATE: '2027-08-01T00:00:00Z'
+          AZURE_BUDGET_NOTIFICATION_EMAIL: ci-validation@example.com
+        run: |
+          while IFS= read -r file; do
+            echo "Compiling ${file}"
+            az bicep build-params --file "$file" --stdout >/dev/null
+          done < <(find infra/bicep -type f -name '*.bicepparam' | sort)
+
       - name: Check changed files for whitespace errors
         shell: bash
         env:

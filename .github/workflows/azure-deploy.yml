@@ -1,0 +1,173 @@
+name: Azure deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: Environment to preview and deploy
+        required: true
+        type: choice
+        options:
+          - dev
+
+permissions:
+  contents: read
+
+concurrency:
+  group: azure-deployment-${{ inputs.target_environment }}
+  cancel-in-progress: false
+
+jobs:
+  what-if:
+    name: Preview Azure changes
+    runs-on: ubuntu-latest
+    environment: ${{ format('{0}-preview', inputs.target_environment) }}
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      AZURE_CORE_OUTPUT: none
+      AZURE_RESOURCE_OWNER: ${{ vars.AZURE_RESOURCE_OWNER }}
+      AZURE_BUDGET_NOTIFICATION_EMAIL: ${{ vars.AZURE_BUDGET_NOTIFICATION_EMAIL }}
+      TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
+
+    outputs:
+      parameter_file: ${{ steps.parameters.outputs.parameter_file }}
+      resource_owner: ${{ steps.parameters.outputs.resource_owner }}
+      budget_notification_email: ${{ steps.parameters.outputs.budget_notification_email }}
+      budget_start_date: ${{ steps.parameters.outputs.budget_start_date }}
+      budget_end_date: ${{ steps.parameters.outputs.budget_end_date }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Install BicepFf
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          az bicep install --version v0.46.1
+          az bicep version
+
+      - name: Log in to Azure using OIDC
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3.0.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Prepare deployment parameters
+        id: parameters
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$AZURE_RESOURCE_OWNER" ]]; then
+            echo "AZURE_RESOURCE_OWNER is not configured."
+            exit 1
+          fi
+
+          if [[ -z "$AZURE_BUDGET_NOTIFICATION_EMAIL" ]]; then
+            echo "AZURE_BUDGET_NOTIFICATION_EMAIL is not configured."
+            exit 1
+          fi
+
+          case "$TARGET_ENVIRONMENT" in
+            dev)
+              parameter_file="infra/bicep/parameters/dev.bicepparam"
+              ;;
+            *)
+              echo "Unsupported environment: $TARGET_ENVIRONMENT"
+              exit 1
+              ;;
+          esac
+
+          budget_start_date="$(date -u +'%Y-%m-01T00:00:00Z')"
+          budget_end_date="$(date -u -d '+1 year' +'%Y-%m-01T00:00:00Z')"
+
+          {
+            echo "AZURE_BUDGET_START_DATE=$budget_start_date"
+            echo "AZURE_BUDGET_END_DATE=$budget_end_date"
+          } >> "$GITHUB_ENV"
+
+          {
+            echo "parameter_file=$parameter_file"
+            echo "resource_owner=$AZURE_RESOURCE_OWNER"
+            echo "budget_notification_email=$AZURE_BUDGET_NOTIFICATION_EMAIL"
+            echo "budget_start_date=$budget_start_date"
+            echo "budget_end_date=$budget_end_date"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Preview subscription changes
+        shell: bash
+        env:
+          PARAMETER_FILE: ${{ steps.parameters.outputs.parameter_file }}
+        run: |
+          set -euo pipefail
+
+          az deployment sub what-if \
+            --name "what-if-${TARGET_ENVIRONMENT}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --location swedencentral \
+            --parameters "$PARAMETER_FILE" \
+            --result-format ResourceIdOnly \
+            --no-pretty-print \
+            --output jsonc
+
+  deploy:
+    name: Deploy Azure changes
+    needs: what-if
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target_environment }}
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      AZURE_CORE_OUTPUT: none
+      AZURE_RESOURCE_OWNER: ${{ needs.what-if.outputs.resource_owner }}
+      AZURE_BUDGET_NOTIFICATION_EMAIL: ${{ needs.what-if.outputs.budget_notification_email }}
+      AZURE_BUDGET_START_DATE: ${{ needs.what-if.outputs.budget_start_date }}
+      AZURE_BUDGET_END_DATE: ${{ needs.what-if.outputs.budget_end_date }}
+      PARAMETER_FILE: ${{ needs.what-if.outputs.parameter_file }}
+      TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
+
+    steps:
+      - name: Check out previewed commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Install Bicep
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          az bicep install --version v0.46.1
+          az bicep version
+
+      - name: Log in to Azure using OIDC
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3.0.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy subscription changes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          az deployment sub create \
+            --name "deploy-${TARGET_ENVIRONMENT}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --location swedencentral \
+            --parameters "$PARAMETER_FILE" \
+            --query "{Name:name, State:properties.provisioningState, Timestamp:properties.timestamp}" \
+            --output table
