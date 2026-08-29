@@ -29,8 +29,6 @@ param budgetNotificationEmails array
 @description('Environment to deploy.')
 @allowed([
   'shared'
-  'dev'
-  'demo'
 ])
 param targetEnvironment string
 
