@@ -9,6 +9,8 @@ on:
         type: choice
         options:
           - dev
+          - demo
+          - shared
 
 permissions:
   contents: read
@@ -78,16 +80,6 @@ jobs:
             exit 1
           fi
 
-          case "$TARGET_ENVIRONMENT" in
-            dev)
-              parameter_file="infra/bicep/parameters/dev.bicepparam"
-              ;;
-            *)
-              echo "Unsupported environment: $TARGET_ENVIRONMENT"
-              exit 1
-              ;;
-          esac
-
           budget_start_date="$(date -u +'%Y-%m-01T00:00:00Z')"
           budget_end_date="$(date -u -d '+1 year' +'%Y-%m-01T00:00:00Z')"
 
@@ -97,7 +89,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
           {
-            echo "parameter_file=$parameter_file"
+            echo "parameter_file="infra/bicep/parameters/$TARGET_ENVIRONMENT.bicepparam""
             echo "resource_owner=$AZURE_RESOURCE_OWNER"
             echo "budget_notification_email=$AZURE_BUDGET_NOTIFICATION_EMAIL"
             echo "budget_start_date=$budget_start_date"
