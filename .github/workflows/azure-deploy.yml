@@ -89,7 +89,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
           {
-            echo "parameter_file="infra/bicep/parameters/$TARGET_ENVIRONMENT.bicepparam""
+            echo "parameter_file=infra/bicep/parameters/${TARGET_ENVIRONMENT}.bicepparam"
             echo "resource_owner=$AZURE_RESOURCE_OWNER"
             echo "budget_notification_email=$AZURE_BUDGET_NOTIFICATION_EMAIL"
             echo "budget_start_date=$budget_start_date"
