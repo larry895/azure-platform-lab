@@ -26,6 +26,14 @@ param budgetEndDate string
 @minLength(1)
 param budgetNotificationEmails array
 
+@description('Environment to deploy.')
+@allowed([
+  'shared'
+  'dev'
+  'demo'
+])
+param targetEnvironment string
+
 var commonTags = {
   ManagedBy: 'azure-platform-lab'
   ProvisionedBy: 'Bicep'
@@ -33,34 +41,17 @@ var commonTags = {
   Owner: resourceOwner
 }
 
-var environments = [
-  {
-    name: 'shared'
-    lifecycle: 'persistent'
+module resourceGroup './modules/resource-group.bicep' = {
+  name: 'deploy-${targetEnvironment}-resource-group'
+  params: {
+    resourceGroupName: 'rg-${namePrefix}-${targetEnvironment}'
+    location: location
+    tags: union(commonTags, {
+      Environment: targetEnvironment
+      Lifecycle: 'persistent'
+    })
   }
-  {
-    name: 'dev'
-    lifecycle: 'persistent'
-  }
-  {
-    name: 'demo'
-    lifecycle: 'persistent'
-  }
-]
-
-module resourceGroups './modules/resource-group.bicep' = [
-  for environment in environments: {
-    name: 'deploy-${environment.name}-resource-group'
-    params: {
-      resourceGroupName: 'rg-${namePrefix}-${environment.name}'
-      location: location
-      tags: union(commonTags, {
-        Environment: environment.name
-        Lifecycle: environment.lifecycle
-      })
-    }
-  }
-]
+}
 
 module subscriptionBudget './modules/subscription-budget.bicep' = {
   name: 'deploy-subscription-budget'
@@ -73,12 +64,10 @@ module subscriptionBudget './modules/subscription-budget.bicep' = {
   }
 }
 
-output resourceGroups array = [
-  for (environment, index) in environments: {
-    environment: environment.name
-    id: resourceGroups[index].outputs.resourceGroupId
-    name: resourceGroups[index].outputs.resourceGroupName
-  }
-]
+output resourceGroup object = {
+  environment: targetEnvironment
+  id: resourceGroup.outputs.resourceGroupId
+  name: resourceGroup.outputs.resourceGroupName
+}
 
 output subscriptionBudgetId string = subscriptionBudget.outputs.budgetId
